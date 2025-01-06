@@ -1,96 +1,112 @@
-import User from "../Models/userModel.js"
+import User from "../Models/userModel.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 import nodemailer from "nodemailer";
+import randomstring from "randomstring";
 
 dotenv.config();
 
 export const registerUser = async (req, res) => {
-    try {
-      const { name, email, password, role } = req.body;
-      const hashPassword = await bcrypt.hash(password, 10);
-      //console.log(hashPassword);
-      const newUser = new User({ name, email, password: hashPassword, role });
-      await newUser.save();
-      res
-        .status(200)
-        .json({ message: "User Registered Successfully", data: newUser });
-    } catch (error) {
-      res.status(500).json({ message: error.message });
+  try {
+    const { name, email, password } = req.body;
+    const hashPassword = await bcrypt.hash(password, 10);
+    //console.log(hashPassword);
+    const newUser = new User({ name, email, password: hashPassword, role });
+    await newUser.save();
+    res
+      .status(200)
+      .json({ message: "User Registered Successfully", data: newUser });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+//login user || signin
+export const loginUser = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ message: "User Not Found" });
     }
-  };
-  
-  //login user || signin
-  export const loginUser = async (req, res) => {
-    try {
-      const { email, password } = req.body;
-      const user = await User.findOne({ email });
-      if (!user) {
-        return res.status(404).json({ message: "User Not Found" });
-      }
-      const passwordMatch = await bcrypt.compare(password, user.password);
-      if (!passwordMatch) {
-        return res.status(400).json({ message: "Invalid Password" });
-      }
-  
-      const token = jwt.sign({ _id: user._id }, process.env.JWT_SECRET, {
-        expiresIn: "1h",
-      });
-      user.token = token;
-      await user.save();
-      res
-        .status(200)
-        .json({ message: "User Logged In Successfully", token: token });
-    } catch (error) {
-      res.status(500).json({ message: error.message });
+    const passwordMatch = await bcrypt.compare(password, user.password);
+    if (!passwordMatch) {
+      return res.status(400).json({ message: "Invalid Password" });
     }
-  };
-  
-  export const forgotPassword = async (req, res) => {
-    try {
-      const { email } = req.body;
-      const user = await User.findOne({ email });
-      if (!user) {
-        return res.status(404).json({ message: "User Not Found" });
-      }
-      const token = jwt.sign({ _id: user._id }, process.env.JWT_SECRET, {
-        expiresIn: "1h",
+
+    const passkey = randomstring.generate();
+
+    const token = jwt.sign({ _id: user._id }, process.env.JWT_SECRET, {
+      expiresIn: "1h",
+    });
+    user.token = token;
+    user.passkey = passkey;
+    await user.save();
+    res
+      .status(200)
+      .json({
+        message: "User Logged In Successfully",
+        token: token,
+        passkey: passkey,
       });
-      const transporter = nodemailer.createTransport({
-        //Gmail or yahoo or outlook
-        service: "Gmail",
-        auth: {
-          user: process.env.PASS_MAIL,
-          pass: process.env.PASS_KEY,
-        },
-      });
-      const mailOptions = {
-        from: process.env.PASS_MAIL,
-        to: user.email,
-        subject: "Password Reset Link from HK",
-        text: `You are receiving this Mail because you have requested the reset of the password for your account 
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ message: "User Not Found" });
+    }
+    const token = jwt.sign({ _id: user._id }, process.env.JWT_SECRET, {
+      expiresIn: "1h",
+    });
+
+    const passkey = user.passkey;
+
+    const transporter = nodemailer.createTransport({
+      //Gmail or yahoo or outlook
+      service: "Gmail",
+      auth: {
+        user: process.env.PASS_MAIL,
+        pass: process.env.PASS_KEY,
+      },
+    });
+    const mailOptions = {
+      from: process.env.PASS_MAIL,
+      to: user.email,
+      subject: "Password Reset Link from HK",
+      text: `You are receiving this Mail because you have requested the reset of the password for your account 
         Please click the following link or paste it into your browser to complete the process
-        https://password-reset-hkx.netlify.app/reset-password/${user._id}/${token}`,
-      };
-      transporter.sendMail(mailOptions, function (error, info) {
-        if (error) {
-          console.log(error);
-          res
-            .status(500)
-            .json({ message: "Internal server error in sending the mail" });
-        } else {
-          res.status(200).json({ message: "Email Sent Successfully" });
-        }
-      });
-    } catch (error) {
-      res.status(500).json({ message: error.message });
-    }
-  };
-  
-  export const resetPassword = async (req, res) => {
-    const { id, token } = req.params;
-    const { password } = req.body;
+        https://password-reset-hkx.netlify.app/reset-password/${user._id}/${token}/${passkey}`,
+    };
+    transporter.sendMail(mailOptions, function (error, info) {
+      if (error) {
+        console.log(error);
+        res
+          .status(500)
+          .json({ message: "Internal server error in sending the mail" });
+      } else {
+        res.status(200).json({ message: "Email Sent Successfully" });
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const resetPassword = async (req, res) => {
+  const { id, token, passkey } = req.params;
+  const { password } = req.body;
+  const user = await User.findById({ _id: id });
+
+  // console.log(passkey)
+  if (user.passkey === passkey) {
+    // console.log(process.env.JWT_SECRET)
     jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
       if (err) {
         return res.status(400).json({ message: "Invalid Token" });
@@ -105,4 +121,5 @@ export const registerUser = async (req, res) => {
           .catch((err) => res.send({ status: err }));
       }
     });
-  };
+  }
+};
