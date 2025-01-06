@@ -12,7 +12,7 @@ export const registerUser = async (req, res) => {
     const { name, email, password } = req.body;
     const hashPassword = await bcrypt.hash(password, 10);
     //console.log(hashPassword);
-    const newUser = new User({ name, email, password: hashPassword, role });
+    const newUser = new User({ name, email, password: hashPassword });
     await newUser.save();
     res
       .status(200)
