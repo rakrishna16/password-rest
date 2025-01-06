@@ -71,7 +71,7 @@ export const registerUser = async (req, res) => {
         subject: "Password Reset Link from HK",
         text: `You are receiving this Mail because you have requested the reset of the password for your account 
         Please click the following link or paste it into your browser to complete the process
-        http://localhost:5173/reset-password/${user._id}/${token}`,
+        https://password-reset-hkx.netlify.app/reset-password/${user._id}/${token}`,
       };
       transporter.sendMail(mailOptions, function (error, info) {
         if (error) {
